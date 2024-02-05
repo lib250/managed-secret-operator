@@ -19,7 +19,11 @@ package controller
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -50,6 +54,48 @@ func (r *ManagedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	_ = log.FromContext(ctx)
 
 	// TODO(user): your logic here
+	log.Info("Entering ManagedSecret reconcile", "req", req)
+
+	var managedSecret v1alpha1.ManagedSecret
+
+	if err := r.Get(ctx, req.NamespacedName, &managedSecret); err != nil {
+		log.Error(err, "could not fetch ManagedSecret")
+		return ctrl.Result{}, ignoreNotFound(err)
+	}
+
+	for _, namespace := range managedSecret.Spec.Namespaces {
+		secret := &corev1.Secret{}
+		secretName := types.NamespacedName{
+			Namespace: namespace,
+			Name: req.Name
+		}
+
+		err := r.Get(ctx, secretName, secret)
+		if err != nil && errors.IsNotFound(err) {
+			secret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: req.Name,
+					Namespace: namespace
+				},
+				Data: managedSecret.Spec.Secret
+			}
+			if err := r.Create(ctx, secret); err != nil {
+				log.Error(err, "Failed to create Secret", "Namespace", namespace, "Name", req.Name)
+				continue
+			}
+			log.Info("Created Secret", "Namespace", namespace, "Name", req.Name)
+		} else if err == nil {
+			secret.Data = managedSecret.Spec.Secret
+			if err := r.Status.Update(ctx, secret); err != nil {
+				log.Error(err, "Failed to update Secret", "Namespace", namespace, "Name", req.Name)
+				continue
+			}
+			log.Info("Updated Secret", "Namespace", namespace, "Name", req.Name)
+		} else {
+			log.Error(err, "Failed to get Secret", "Namespace", targetNamespace, "Name", req.Name)
+			continue
+		}
+	}
 
 	return ctrl.Result{}, nil
 }

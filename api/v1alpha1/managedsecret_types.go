@@ -29,7 +29,8 @@ type ManagedSecretSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of ManagedSecret. Edit managedsecret_types.go to remove/update
-	Secret string `json:"secret,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	Secret     string   `json:"secret,omitempty"`
 	Namespaces []string `json:"namespaces,omitempty"`
 }
 
@@ -37,7 +38,7 @@ type ManagedSecretSpec struct {
 type ManagedSecretStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Secret string `json:"secret,omitempty"`
+	Secret     string   `json:"secret,omitempty"`
 	Namespaces []string `json:"namespaces,omitempty"`
 }
 
