@@ -86,7 +86,7 @@ func (r *ManagedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			log.Info("Created Secret", "Namespace", namespace, "Name", req.Name)
 		} else if err == nil {
 			secret.Data = managedSecret.Spec.Secret
-			if err := r.Status.Update(ctx, secret); err != nil {
+			if err := r.Status().Update(ctx, secret); err != nil {
 				log.Error(err, "Failed to update Secret", "Namespace", namespace, "Name", req.Name)
 				continue
 			}
