@@ -56,12 +56,42 @@ func (r *ManagedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// TODO(user): your logic here
 	log.Info("Entering ManagedSecret reconcile", "req", req)
 
+	const managedSecretFinalizer = "managedsecret.lib250.domain/finalizer"
+
 	var managedSecret v1alpha1.ManagedSecret
 
 	if err := r.Get(ctx, req.NamespacedName, &managedSecret); err != nil {
 		log.Error(err, "could not fetch ManagedSecret")
 		return ctrl.Result{}, ignoreNotFound(err)
 	}
+
+
+	if managedSecret.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !containsString(managedSecret.ObjectMeta.Finalizers, managedSecretFinalizer) {
+			managedSecret.ObjectMeta.Finalizers = append(managedSecret.ObjectMeta.Finalizers, managedSecretFinalizer)
+			if err := r.Update(ctx, &managedSecret); err != nil {
+				log.Error(err, "Failed to update finalizzer", "Namespace", namespace, "Name", req.Name)
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		if containsString(managedSecret.ObjectMeta.Finalizers, managedSecretFinalizer) {
+
+			if err := r.cleanupSecrets(ctx, managedSecret); err != nil {
+				log.Error(err, "Failed to clean up", "Namespace", namespace, "Name", req.Name)
+				return ctrl.Result{}, err
+			}
+
+			managedSecret.ObjectMeta.Finalizers = removeString(managedSecret.ObjectMeta.Finalizers, managedSecretFinalizer)
+			if err := r.Update(ctx, &managedSecret); err != nil {
+				log.Error(err, "Failed to remove finalizer", "Namespace", namespace, "Name", req.Name)
+				return ctrl.Result{}, err
+			}
+		}
+
+		return ctrl.Result{}, err
+	}
+
 
 	for _, namespace := range managedSecret.Spec.Namespaces {
 		secret := &corev1.Secret{}
@@ -100,9 +130,53 @@ func (r *ManagedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
+func (r *ManagedSecretReconciler) cleanupSecrets(ctx context.Context, managedSecret v1alpha1.ManagedSecret) error {
+    
+    for _, namespace := range managedSecret.Spec.Namespaces {
+        
+        var secretList corev1.SecretList
+        listOpts := []client.ListOption{
+            client.InNamespace(namespace),
+            client.MatchingLabels{"managed-by": "managedsecret-operator", "managedsecret-name": managedSecret.Name},
+        }
+
+        if err := r.List(ctx, &secretList, listOpts...); err != nil {
+            log.Error(err, "Failed to List Secrets during cleanup", "Namespace", namespace)
+            return err
+        }
+
+        for _, secret := range secretList.Items {
+            if err := r.Delete(ctx, &secret); err != nil {
+				log.Error(err, "Error deleting during cleanup", "Namespace", namespace)
+            }
+        }
+    }
+    return nil
+}
+
+func containsString(slice []string, s string) bool {
+    for _, item := range slice {
+        if item == s {
+            return true
+        }
+    }
+    return false
+}
+
+func removeString(slice []string, s string) []string {
+    result := []string{}
+    for _, item := range slice {
+        if item != s {
+            result = append(result, item)
+        }
+    }
+    return result
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ManagedSecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&managedsecretv1alpha1.ManagedSecret{}).
 		Complete(r)
 }
+
