@@ -92,7 +92,7 @@ func (r *ManagedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 			log.Info("Updated Secret", "Namespace", namespace, "Name", req.Name)
 		} else {
-			log.Error(err, "Failed to get Secret", "Namespace", targetNamespace, "Name", req.Name)
+			log.Error(err, "Failed to get Secret", "Namespace", namespace, "Name", req.Name)
 			continue
 		}
 	}
